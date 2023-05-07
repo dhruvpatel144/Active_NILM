@@ -8,13 +8,14 @@ import numpy as np
 
 dist = tfp.distributions
 
+
 class seq2point(nn.Module):
     @nn.compact
     def __call__(self, X, deterministic):
         X = nn.Conv(30, kernel_size=(10,))(X)
         X = nn.relu(X)
         X = nn.Conv(30, kernel_size=(8,))(X)
-        X = nn.relu(X)        
+        X = nn.relu(X)
         X = nn.Conv(40, kernel_size=(6,))(X)
         X = nn.relu(X)
         X = nn.Conv(50, kernel_size=(5,))(X)
@@ -54,21 +55,20 @@ class seq2point(nn.Module):
         mean5 = nn.Dense(1)(mean5)
         # sigma5 = nn.softplus(nn.Dense(1)(mean5))
 
-        mean = jnp.concatenate([mean1, mean2, mean3, mean4, mean5], axis = 1)
+        mean = jnp.concatenate([mean1, mean2, mean3, mean4, mean5], axis=1)
         # sigma = jnp.concatenate([sigma1, sigma2, sigma3, sigma4, sigma5], axis = 1)
         return mean, sigma
 
     def loss_fn(self, params, X, y, deterministic=False, rng=jax.random.PRNGKey(0)):
-        mean, sigma = self.apply(
-            params, X, deterministic=deterministic, rngs={"dropout": rng}
-        )
+        mean, sigma = self.apply(params, X, deterministic=deterministic, rngs={"dropout": rng})
 
         def loss(mean, sigma, y):
             d = dist.Normal(loc=mean, scale=sigma)
             return -np.mean(jnp.sum(d.log_prob(y), axis=-1))
 
         return jnp.mean(jax.vmap(loss, in_axes=(0, 0, 0))(mean, sigma, y))
-    
+
+
 def fit(
     model,
     params,
@@ -96,9 +96,7 @@ def fit(
     def one_epoch(carry, rng):
         params = carry["params"]
         opt_state = carry["state"]
-        idx = jax.random.choice(
-            rng, jnp.arange(len(X)), shape=(batch_size,), replace=False
-        )
+        idx = jax.random.choice(rng, jnp.arange(len(X)), shape=(batch_size,), replace=False)
         loss_val, grads = loss_grad_fn(params, X[idx], y[idx], rng=rng)
         updates, opt_state = opt.update(grads, opt_state, params)
         params = optax.apply_updates(params, updates)

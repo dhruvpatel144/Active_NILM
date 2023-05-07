@@ -5,14 +5,14 @@ import jax.numpy as jnp
 import scipy.stats as st
 
 
-def calibration_regression(mean, sigma, Y,label, color, ax=None):
+def calibration_regression(mean, sigma, Y, label, color, ax=None):
     """
-    mean : (n_samples,1) or (n_sample,) prediction mean 
-    sigma : (n_samples,1) or (n_sample,) prediction sigma 
-    Y : (n_samples,1) or (n_sample,) Y co-ordinate of ground truth 
-    label :  string, 
-    
-    
+    mean : (n_samples,1) or (n_sample,) prediction mean
+    sigma : (n_samples,1) or (n_sample,) prediction sigma
+    Y : (n_samples,1) or (n_sample,) Y co-ordinate of ground truth
+    label :  string,
+
+
     """
 
     marker_size = None
@@ -37,12 +37,12 @@ def calibration_regression(mean, sigma, Y,label, color, ax=None):
 
     ax.plot(k, counts, color=color, label=label)
 
-    ax.scatter(k, counts, color=color,s=marker_size)
-    ax.scatter(k, k,color="green",s=marker_size)
+    ax.scatter(k, counts, color=color, s=marker_size)
+    ax.scatter(k, k, color="green", s=marker_size)
     ax.set_yticks(k)
     ax.set_xticks(k)
-    ax.set_xlim([0,1])
-    ax.set_ylim([0,1])
+    ax.set_xlim([0, 1])
+    ax.set_ylim([0, 1])
     # ax.legend()
     ax.set_xlabel("decile")
     ax.set_ylabel("ratio of points")

@@ -114,3 +114,72 @@ def retrain(new_house, new_start, new_end, pool_houses, train, test, given_date,
             max_house = pool_houses[i]
 
     return max_house, max_house_id, rmse(y_test, test_mean), mae(y_test, test_mean), train, test
+
+
+def retrain_random(new_house, new_start, new_end, train, test, data_aggregated):
+    # train = data_aggregated[data_aggregated["dataid"].isin(train_houses)]
+    # test = data_aggregated[data_aggregated["dataid"].isin(test_houses)]
+    n = 99
+    if new_house == 0:
+
+        x_train, y_train = dataloader(train, "2018-03-01 00:00:00-06", "2018-03-10 23:59:00-06", n)
+        scaler_x = StandardScaler()
+        scaler_y = StandardScaler()
+        x_train = scaler_x.fit_transform(x_train)
+        y_train = scaler_y.fit_transform(y_train)
+        x_train = jnp.array(x_train).reshape(x_train.shape[0], n, 1)
+        y_train = jnp.array(y_train)
+        print(y_train.shape)
+        model = seq2point()
+        params = model.init(jax.random.PRNGKey(0), x_train, True)
+        params, losses = fit(model, params, x_train, y_train, False, batch_size=2048, learning_rate=0.0001, epochs=30)
+        plt.plot(losses)
+        plt.show()
+        x_test, y_test = dataloader(test, "2018-05-01 00:00:00-06", "2018-05-10 23:59:00-06", n)
+        x_test = scaler_x.transform(x_test)
+        x_test = jnp.array(x_test).reshape(x_test.shape[0], n, 1)
+        y_test = np.array(y_test)
+        y_hat = model.apply(params, x_test, True, rngs={"dropout": jax.random.PRNGKey(0)})
+        print(np.array(y_hat).shape)
+        n_stacks = 10
+        test_mean = scaler_y.inverse_transform(y_hat[0])
+        test_sigma = scaler_y.scale_ * y_hat[1]
+        current_y_hat = test_mean
+        print(
+            f"RMSE : {rmse(y_test, test_mean)} MAE  : {mae(y_test,test_mean)} NLL : {NLL(test_mean,test_sigma,y_test)}"
+        )
+
+    else:
+        new_df = data_aggregated[
+            ((data_aggregated["dataid"] == new_house) & (data_aggregated["localminute"] > new_start))
+        ]
+        train = train.append(new_df)
+        print("Train houses are")
+        print(train["dataid"].unique())
+        x_test, y_test = dataloader(test, "2018-05-01 00:00:00-06", "2018-05-10 23:59:00-06", n)
+        end_date = new_end
+        x_train, y_train = dataloader(train, "2018-03-01 00:00:00-06", end_date, n)
+        # print(x_train.shape)
+        scaler_x = StandardScaler()
+        scaler_y = StandardScaler()
+        x_train = scaler_x.fit_transform(x_train)
+        y_train = scaler_y.fit_transform(y_train)
+        x_train = jnp.array(x_train).reshape(x_train.shape[0], n, 1)
+        y_train = jnp.array(y_train)
+        model = seq2point()
+        params = model.init(jax.random.PRNGKey(0), x_train, True)
+        params, losses = fit(model, params, x_train, y_train, False, batch_size=2048, learning_rate=0.0001, epochs=30)
+        plt.plot(losses)
+        plt.show()
+        x_test = scaler_x.transform(x_test)
+        x_test = jnp.array(x_test).reshape(x_test.shape[0], n, 1)
+        y_test = np.array(y_test)
+        n_stacks = 10
+        y_hat = model.apply(params, x_test, True, rngs={"dropout": jax.random.PRNGKey(0)})
+        test_mean = scaler_y.inverse_transform(y_hat[0])
+        test_sigma = scaler_y.scale_ * y_hat[1]
+        current_y_hat = test_mean
+        print(
+            f"RMSE : {rmse(y_test, test_mean)} MAE  : {mae(y_test,test_mean)} NLL : {NLL(test_mean,test_sigma,y_test)}"
+        )
+    return rmse(y_test, test_mean), mae(y_test, test_mean), train, test, current_y_hat

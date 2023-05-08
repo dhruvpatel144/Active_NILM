@@ -174,3 +174,129 @@ def retrain(new_house, new_start, new_end, pool_houses, train, test, given_date,
             max_house_id = i
             max_house = pool_houses[i]
     return max_house, max_house_id, rmse(y_test, test_mean), train, test
+
+
+def retrain_random(new_house, new_start, new_end, pool_houses, train, test, appliance, data_aggregated):
+
+    current_y_hat = -1
+    n = 99
+    if new_house == 0:
+        # getting the train data
+
+        # print(f"new house is {new_house}\n new-start is {new_start}\n new_end is {new_end}\n pool_houses are {pool_houses}\ntrain is {train}\ntest is {test}\n batch_size is {batch_size}\n learning_rate is {learning_rate}")
+        # print(f"Shape of train is {train.shape} and shape of test is {test.shape}")
+        x_train, y_train = dataloader(appliance, train, "2018-03-01 00:00:00-06", "2018-03-10 23:59:00-06", n)
+
+        # initializing standard scalers
+        scaler_x = StandardScaler()
+        scaler_y = StandardScaler()
+
+        # transforming the data
+        x_train = scaler_x.fit_transform(x_train)
+        y_train = scaler_y.fit_transform(y_train)
+        x_train = jnp.array(x_train).reshape(x_train.shape[0], n, 1)
+        y_train = jnp.array(y_train)
+
+        # initialziing the model
+        model = seq2point()
+        # getting the model parameters
+        params = model.init(jax.random.PRNGKey(0), x_train, True)
+        params, losses = fit(
+            model,
+            params,
+            x_train,
+            y_train,
+            False,
+            batch_size=dict_bs_lr[f"{appliance}"][0],
+            learning_rate=dict_bs_lr[f"{appliance}"][1],
+            epochs=30,
+        )
+        # plotting the losses
+        plt.plot(losses)
+        sns.despine()
+        # getting the test data
+        x_test, y_test = dataloader(appliance, test, "2018-05-01 00:00:00-06", "2018-05-10 23:59:00-06", n)
+        # scaling the test data
+        x_test = scaler_x.transform(x_test)
+        # covnerting to jnp array
+        x_test = jnp.array(x_test).reshape(x_test.shape[0], n, 1)
+        y_test = jnp.array(y_test)
+        # getting results
+        y_hat = model.apply(params, x_test, True, rngs={"dropout": jax.random.PRNGKey(0)})
+
+        test_mean = scaler_y.inverse_transform(y_hat[0])
+        test_sigma = scaler_y.scale_ * y_hat[1]
+
+        print(
+            f"RMSE : {rmse(y_test, test_mean):.4f} MAE  : {mae(y_test,test_mean):.4f} NLL : {NLL(test_mean,test_sigma,y_test):.4f}"
+        )
+
+        current_y_hat = test_mean
+
+    else:
+
+        # fetching new house's dataframe, in the required time frame
+        new_df = data_aggregated[
+            ((data_aggregated["dataid"] == new_house) & (data_aggregated["localminute"] > new_start))
+        ]
+
+        # adding to train data
+        train = train.append(new_df)
+        print("Train houses are")
+        print(train["dataid"].unique())
+
+        # getting the test data
+        x_test, y_test = dataloader(appliance, test, "2018-05-01 00:00:00-06", "2018-05-10 23:59:00-06", n)
+        # setting the new end date
+        end_date = new_end
+
+        # getting the train data
+        x_train, y_train = dataloader(appliance, train, "2018-03-01 00:00:00-06", end_date, n)
+        print(x_train.shape)
+
+        # initializing the scaler
+        scaler_x = StandardScaler()
+        scaler_y = StandardScaler()
+
+        # scaling the data
+        x_train = scaler_x.fit_transform(x_train)
+        y_train = scaler_y.fit_transform(y_train)
+        # converting to jnp array
+        x_train = jnp.array(x_train).reshape(x_train.shape[0], n, 1)
+        y_train = jnp.array(y_train)
+
+        # initializing the model
+        model = seq2point()
+
+        # getting model params
+        params = model.init(jax.random.PRNGKey(0), x_train, True)
+        params, losses = fit(
+            model,
+            params,
+            x_train,
+            y_train,
+            False,
+            batch_size=dict_bs_lr[f"{appliance}"][0],
+            learning_rate=dict_bs_lr[f"{appliance}"][1],
+            epochs=30,
+        )
+        # plt.plot(losses)
+        sns.despine()
+
+        # transforming the test data
+        x_test = scaler_x.transform(x_test)
+        x_test = jnp.array(x_test).reshape(x_test.shape[0], n, 1)
+        y_test = jnp.array(y_test)
+        n_stacks = 10
+
+        # getting the predictions
+        y_hat = model.apply(params, x_test, True, rngs={"dropout": jax.random.PRNGKey(0)})
+        # getting test mean and sigma
+        test_mean = scaler_y.inverse_transform(y_hat[0])
+        test_sigma = scaler_y.scale_ * y_hat[1]
+        current_y_hat = test_mean
+        print(
+            f"RMSE : {rmse(y_test, test_mean):.4f} MAE  : {mae(y_test,test_mean):.4f} NLL : {NLL(test_mean,test_sigma,y_test):.4f}"
+        )
+
+    return rmse(y_test, test_mean), mae(y_test, test_mean), train, test, current_y_hat
